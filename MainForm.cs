@@ -88,7 +88,6 @@ namespace FileExplorer
 
         private void DGV_repo_CellDoubleClick(object sender, DataGridViewCellEventArgs e)
         {
-
             var path_item = files_table_items[e.RowIndex];
 
             if (path_item.Type == FilesTableItemType.Drive || path_item.Type ==  FilesTableItemType.Folder)
