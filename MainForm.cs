@@ -136,15 +136,57 @@ namespace FileExplorer
         {
             try
             {
-                foreach (var file in files_for_process)
+                FileStream fs1 = new FileStream(files_for_process[0].Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                FileStream fs2 = new FileStream(files_for_process[1].Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+
+                FileStream fs_result = new FileStream(Path.GetDirectoryName(files_for_process[1].Path) + "/xor_res.dat", FileMode.Create);
+
+                byte[] arr1 = new byte[1024];
+                byte[] arr2 = new byte[1024];
+
+                byte[] arr_result = new byte[1024];
+
+                int num_read1;
+                int num_read2;
+                int min;
+                while (true)
                 {
-                    //File.ReadAllBytes(file.Path);
+                    num_read1 = fs1.Read(arr1, 0, arr1.Length);
+                    num_read2 = fs2.Read(arr2, 0, arr2.Length);
+
+                    if (num_read1 == 0 || num_read2 == 0)
+                        break;
+
+                    // ищу минимальный массив
+                    min =  num_read1 > num_read2 ?  num_read2 : num_read1;
+
+                    for (int i=0;i< min; i++)
+                        arr_result[i]= (byte)(arr1[i] ^ arr2[i]);
+
+                    fs_result.Write(arr_result, 0, min);
                 }
+
+                fs1.Close();
+                fs2.Close();
+                fs_result.Close();
+
             }
-            catch (Exception)
+            catch (Exception exc)
             {
-                //
+                label1.Text = exc.Message;
             }
+        }
+
+
+        private void DGV_process_files_CellDoubleClick(object sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex >= files_for_process.Count)
+                return;
+
+            //var path_item = files_for_process[e.RowIndex];
+
+            files_for_process.RemoveAt(e.RowIndex);
+            ShowFilesForProcess();
         }
     }
 }
