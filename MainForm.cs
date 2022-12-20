@@ -12,10 +12,14 @@ namespace FileExplorer
         private List<FilesTableItem> files_table_items = new List<FilesTableItem>();
         private List<FilesTableItem> files_for_process = new List<FilesTableItem>();
 
+        private delegate void changeEnabled(bool enable);
+
         public MainForm()
         {
             InitializeComponent();
+
             ShowFilesAndDirectories();
+            BT_move_back.Enabled = false;
         }
 
         private void ShowFilesTableItems()
@@ -35,15 +39,18 @@ namespace FileExplorer
             {
                 foreach (var drive in DriveInfo.GetDrives())
                 {
-                    string label = string.IsNullOrEmpty(drive.VolumeLabel) ? "Локальный диск" : drive.VolumeLabel;
-                    string name = $"{label} ({drive.Name.Replace("\\", string.Empty)})";
-
-                    files_table_items.Add(new FilesTableItem()
+                    if (drive.IsReady)
                     {
-                        Path = drive.RootDirectory.FullName,
-                        Name = name,
-                        Type = FilesTableItemType.Drive
-                    });
+                        string label = string.IsNullOrEmpty(drive.VolumeLabel) ? "Локальный диск" : drive.VolumeLabel;
+                        string name = $"{label} ({drive.Name.Replace("\\", string.Empty)})";
+
+                        files_table_items.Add(new FilesTableItem()
+                        {
+                            Path = drive.RootDirectory.FullName,
+                            Name = name,
+                            Type = FilesTableItemType.Drive
+                        });
+                    }
                 }
 
                 ShowFilesTableItems();
@@ -123,58 +130,74 @@ namespace FileExplorer
 
             if(previous_item != null)
             {
+                TB_current_path.Text = previous_item.Value;
                 ShowFilesAndDirectories(previous_item.Value);
             }
             else
             {
                 BT_move_back.Enabled = false;
+                TB_current_path.Text = null;
+
                 ShowFilesAndDirectories();
             }
         }
 
         private void BT_process_files_Click(object sender, EventArgs e)
         {
-            try
+            if(files_for_process.Count < 2)
             {
-                FileStream fs1 = new FileStream(files_for_process[0].Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                FileStream fs2 = new FileStream(files_for_process[1].Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                MessageBox.Show("Для обработки требуются 2 файла", "Ошибка выполнения операции", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
 
-                FileStream fs_result = new FileStream(Path.GetDirectoryName(files_for_process[1].Path) + "/xor_res.dat", FileMode.Create);
+            BT_process_files.Enabled = false;
 
-                byte[] arr1 = new byte[1024];
-                byte[] arr2 = new byte[1024];
-
-                byte[] arr_result = new byte[1024];
-
-                int num_read1;
-                int num_read2;
-                int min;
-                while (true)
+            System.Threading.Tasks.Task.Factory.StartNew(() => 
+            {
+                try
                 {
-                    num_read1 = fs1.Read(arr1, 0, arr1.Length);
-                    num_read2 = fs2.Read(arr2, 0, arr2.Length);
+                    FileStream fs1 = new FileStream(files_for_process[0].Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    FileStream fs2 = new FileStream(files_for_process[1].Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
 
-                    if (num_read1 == 0 || num_read2 == 0)
-                        break;
+                    FileStream fs_result = new FileStream(Path.GetDirectoryName(files_for_process[1].Path) + "/xor_res.dat", FileMode.Create);
 
-                    // ищу минимальный массив
-                    min =  num_read1 > num_read2 ?  num_read2 : num_read1;
+                    byte[] arr1 = new byte[1024];
+                    byte[] arr2 = new byte[1024];
 
-                    for (int i=0;i< min; i++)
-                        arr_result[i]= (byte)(arr1[i] ^ arr2[i]);
+                    byte[] arr_result = new byte[1024];
 
-                    fs_result.Write(arr_result, 0, min);
+                    int num_read1;
+                    int num_read2;
+                    int min;
+                    while (true)
+                    {
+                        num_read1 = fs1.Read(arr1, 0, arr1.Length);
+                        num_read2 = fs2.Read(arr2, 0, arr2.Length);
+
+                        if (num_read1 == 0 || num_read2 == 0)
+                            break;
+
+                        // ищу минимальный массив
+                        min = num_read1 > num_read2 ? num_read2 : num_read1;
+
+                        for (int i = 0; i < min; i++)
+                            arr_result[i] = (byte)(arr1[i] ^ arr2[i]);
+
+                        fs_result.Write(arr_result, 0, min);
+                    }
+
+                    fs1.Close();
+                    fs2.Close();
+                    fs_result.Close();
+
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(ex.Message, "Ошибка выполнения операции", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
 
-                fs1.Close();
-                fs2.Close();
-                fs_result.Close();
-
-            }
-            catch (Exception exc)
-            {
-                label1.Text = exc.Message;
-            }
+                BT_process_files.BeginInvoke(new changeEnabled((enable) => BT_process_files.Enabled = enable), true);
+            });            
         }
 
 
@@ -182,8 +205,6 @@ namespace FileExplorer
         {
             if (e.RowIndex >= files_for_process.Count)
                 return;
-
-            //var path_item = files_for_process[e.RowIndex];
 
             files_for_process.RemoveAt(e.RowIndex);
             ShowFilesForProcess();
